@@ -510,6 +510,32 @@ public class CloudPubSubSinkTaskTest {
   }
 
   /**
+   * Tests that if a Kafka message has an empty body and copy attribute headers are disabled then the message is
+   * skipped and not published to Pub/Sub.
+   */
+  @Test
+  public void testSkipMalformedPubSubMessage() {
+    props.put(CloudPubSubSinkConnector.SKIP_EMPTY_MESSAGES, "true");
+    task.start(props);
+    List<SinkRecord> records = new ArrayList<SinkRecord>();
+    records.add(
+        new SinkRecord(
+            KAFKA_TOPIC,
+            5,
+            STRING_SCHEMA,
+            KAFKA_MESSAGE_KEY,
+            BYTE_STRING_SCHEMA,
+            ByteString.copyFromUtf8(""),
+            1001,
+            50001L,
+            TimestampType.CREATE_TIME));
+
+    task.put(records);
+    ArgumentCaptor<PubsubMessage> captor = ArgumentCaptor.forClass(PubsubMessage.class);
+    verify(publisher, times(0)).publish(captor.capture());
+  }
+
+  /**
    * Tests that if a Future that is being processed in flush() failed with an exception and then a
    * second Future is processed successfully in a subsequent flush, then the subsequent flush
    * succeeds.

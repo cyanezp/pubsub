@@ -75,6 +75,7 @@ public class CloudPubSubSinkTask extends SinkTask {
   private int maxShutdownTimeoutMs;
   private boolean includeMetadata;
   private boolean includeHeaders;
+  private boolean skipEmptyMessages;
   private ConnectorCredentialsProvider gcpCredentialsProvider;
   private com.google.cloud.pubsub.v1.Publisher publisher;
 
@@ -122,6 +123,7 @@ public class CloudPubSubSinkTask extends SinkTask {
     messageBodyName = (String) validatedProps.get(CloudPubSubSinkConnector.CPS_MESSAGE_BODY_NAME);
     includeMetadata = (Boolean) validatedProps.get(CloudPubSubSinkConnector.PUBLISH_KAFKA_METADATA);
     includeHeaders = (Boolean) validatedProps.get(CloudPubSubSinkConnector.PUBLISH_KAFKA_HEADERS);
+    skipEmptyMessages = (Boolean) validatedProps.get(CloudPubSubSinkConnector.SKIP_EMPTY_MESSAGES);
     gcpCredentialsProvider = new ConnectorCredentialsProvider();
     String credentialsPath = (String) validatedProps.get(ConnectorUtils.GCP_CREDENTIALS_FILE_PATH_CONFIG);
     String credentialsJson = (String) validatedProps.get(ConnectorUtils.GCP_CREDENTIALS_JSON_CONFIG);
@@ -169,8 +171,15 @@ public class CloudPubSubSinkTask extends SinkTask {
           attributes.put(header.key(), header.value().toString());
         }
       }
-      PubsubMessage message = builder.setData(value).putAllAttributes(attributes).build();
-      publishMessage(record.topic(), record.kafkaPartition(), message);
+      if (value.size() == 0 && !includeMetadata && !includeHeaders && skipEmptyMessages) {
+        log.error("The record on topic '" + record.topic() + "', partition " + record.kafkaPartition() + " and " +
+            "with offset " + record.kafkaOffset() + " cannot be sent to PubSub because it has an empty " +
+            "body and your current configuration parameters are not allowing to include record metadata " +
+            "nor record headers", new IllegalArgumentException(record.toString()));
+      } else {
+        PubsubMessage message = builder.setData(value).putAllAttributes(attributes).build();
+        publishMessage(record.topic(), record.kafkaPartition(), message);
+      }
     }
   }
 
